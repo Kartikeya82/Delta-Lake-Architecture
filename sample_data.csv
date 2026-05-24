@@ -1,0 +1,809 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Real-Time Lakehouse Architecture</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600;700&family=Syne:wght@400;600;700;800&display=swap');
+
+  :root {
+    --bg: #080c14;
+    --surface: #0d1421;
+    --surface2: #111927;
+    --border: #1e2d42;
+    --accent-blue: #2d7aff;
+    --accent-cyan: #00d4ff;
+    --accent-green: #00e5a0;
+    --accent-gold: #f5a623;
+    --accent-purple: #a855f7;
+    --accent-orange: #ff6b35;
+    --bronze: #cd7f32;
+    --silver: #8fb4d4;
+    --gold: #ffd700;
+    --text-primary: #e8f0fe;
+    --text-secondary: #6b8aad;
+    --text-dim: #3a5070;
+    --glow-blue: rgba(45,122,255,0.15);
+    --glow-cyan: rgba(0,212,255,0.12);
+    --glow-green: rgba(0,229,160,0.12);
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    background: var(--bg);
+    font-family: 'Syne', sans-serif;
+    color: var(--text-primary);
+    min-height: 100vh;
+    padding: 40px 32px;
+    position: relative;
+    overflow-x: hidden;
+  }
+
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background:
+      radial-gradient(ellipse 60% 40% at 20% 10%, rgba(45,122,255,0.07) 0%, transparent 60%),
+      radial-gradient(ellipse 50% 40% at 80% 5%, rgba(0,212,255,0.05) 0%, transparent 60%),
+      radial-gradient(ellipse 40% 50% at 50% 90%, rgba(0,229,160,0.05) 0%, transparent 60%);
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  .grid-bg {
+    position: fixed;
+    inset: 0;
+    background-image:
+      linear-gradient(rgba(45,122,255,0.04) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(45,122,255,0.04) 1px, transparent 1px);
+    background-size: 40px 40px;
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  .wrapper {
+    position: relative;
+    z-index: 1;
+    max-width: 1200px;
+    margin: 0 auto;
+  }
+
+  /* HEADER */
+  .header {
+    text-align: center;
+    margin-bottom: 48px;
+    animation: fadeDown 0.6s ease both;
+  }
+
+  .header-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    background: rgba(45,122,255,0.1);
+    border: 1px solid rgba(45,122,255,0.3);
+    border-radius: 100px;
+    padding: 6px 16px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    color: var(--accent-cyan);
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    margin-bottom: 20px;
+  }
+
+  .header-badge::before {
+    content: '';
+    width: 6px; height: 6px;
+    border-radius: 50%;
+    background: var(--accent-cyan);
+    box-shadow: 0 0 8px var(--accent-cyan);
+    animation: pulse 2s ease infinite;
+  }
+
+  h1 {
+    font-size: clamp(28px, 4vw, 48px);
+    font-weight: 800;
+    letter-spacing: -0.02em;
+    line-height: 1.1;
+    background: linear-gradient(135deg, #e8f0fe 30%, var(--accent-cyan) 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+    margin-bottom: 10px;
+  }
+
+  .header-sub {
+    color: var(--text-secondary);
+    font-size: 14px;
+    font-family: 'JetBrains Mono', monospace;
+    letter-spacing: 0.05em;
+  }
+
+  /* LAYER WRAPPER */
+  .layer {
+    margin-bottom: 14px;
+    animation: fadeUp 0.5s ease both;
+  }
+
+  .layer:nth-child(1) { animation-delay: 0.1s; }
+  .layer:nth-child(2) { animation-delay: 0.2s; }
+  .layer:nth-child(3) { animation-delay: 0.3s; }
+  .layer:nth-child(4) { animation-delay: 0.4s; }
+  .layer:nth-child(5) { animation-delay: 0.5s; }
+  .layer:nth-child(6) { animation-delay: 0.6s; }
+  .layer:nth-child(7) { animation-delay: 0.7s; }
+  .layer:nth-child(8) { animation-delay: 0.8s; }
+  .layer:nth-child(9) { animation-delay: 0.9s; }
+
+  .layer-label {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+    color: var(--text-dim);
+    margin-bottom: 8px;
+    padding-left: 4px;
+  }
+
+  /* ARROW */
+  .arrow-row {
+    display: flex;
+    justify-content: center;
+    margin: 4px 0;
+    animation: fadeUp 0.4s ease both;
+  }
+
+  .arrow-col {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 2px;
+  }
+
+  .arrow-line {
+    width: 2px;
+    height: 20px;
+    background: linear-gradient(to bottom, var(--accent-blue), var(--accent-cyan));
+    border-radius: 2px;
+    position: relative;
+  }
+
+  .arrow-line::after {
+    content: '▼';
+    position: absolute;
+    bottom: -14px;
+    left: 50%;
+    transform: translateX(-50%);
+    font-size: 10px;
+    color: var(--accent-cyan);
+  }
+
+  /* CARDS */
+  .card-row {
+    display: grid;
+    gap: 10px;
+  }
+
+  .card-row.cols-4 { grid-template-columns: repeat(4, 1fr); }
+  .card-row.cols-2 { grid-template-columns: repeat(2, 1fr); }
+  .card-row.cols-1 { grid-template-columns: 1fr; }
+
+  .card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 16px 18px;
+    position: relative;
+    overflow: hidden;
+    transition: transform 0.2s ease, border-color 0.2s ease;
+  }
+
+  .card:hover {
+    transform: translateY(-2px);
+    border-color: rgba(45,122,255,0.4);
+  }
+
+  .card::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    border-radius: 12px;
+    opacity: 0;
+    transition: opacity 0.2s ease;
+  }
+
+  .card:hover::before { opacity: 1; }
+
+  .card-icon {
+    font-size: 22px;
+    margin-bottom: 8px;
+    display: block;
+  }
+
+  .card-title {
+    font-size: 13px;
+    font-weight: 700;
+    letter-spacing: -0.01em;
+    margin-bottom: 4px;
+  }
+
+  .card-desc {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px;
+    color: var(--text-secondary);
+    line-height: 1.5;
+  }
+
+  .card-tag {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 9px;
+    padding: 3px 8px;
+    border-radius: 100px;
+    margin-top: 8px;
+    font-weight: 600;
+  }
+
+  /* SOURCE CARDS */
+  .card.source {
+    border-color: rgba(45,122,255,0.25);
+    background: linear-gradient(135deg, rgba(45,122,255,0.06) 0%, var(--surface) 60%);
+  }
+  .card.source::before { background: radial-gradient(circle at top left, rgba(45,122,255,0.08), transparent 70%); }
+  .card.source .card-tag { background: rgba(45,122,255,0.15); color: var(--accent-blue); border: 1px solid rgba(45,122,255,0.25); }
+
+  /* KAFKA CARDS */
+  .card.kafka {
+    border-color: rgba(255,107,53,0.3);
+    background: linear-gradient(135deg, rgba(255,107,53,0.06) 0%, var(--surface) 60%);
+  }
+  .card.kafka::before { background: radial-gradient(circle at top right, rgba(255,107,53,0.08), transparent 70%); }
+  .card.kafka .card-tag { background: rgba(255,107,53,0.15); color: var(--accent-orange); border: 1px solid rgba(255,107,53,0.25); }
+
+  /* SPARK CARD */
+  .card.spark {
+    border-color: rgba(248,141,60,0.35);
+    background: linear-gradient(135deg, rgba(248,141,60,0.07) 0%, var(--surface) 70%);
+  }
+  .card.spark .card-tag { background: rgba(248,141,60,0.15); color: #f88d3c; border: 1px solid rgba(248,141,60,0.25); }
+
+  /* MEDALLION BLOCK */
+  .medallion-block {
+    border: 1px solid rgba(255,215,0,0.2);
+    border-radius: 16px;
+    padding: 14px;
+    background: rgba(255,215,0,0.02);
+    position: relative;
+  }
+
+  .medallion-label {
+    position: absolute;
+    top: -11px;
+    left: 20px;
+    background: var(--bg);
+    padding: 2px 12px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+    color: var(--gold);
+    border: 1px solid rgba(255,215,0,0.25);
+    border-radius: 100px;
+  }
+
+  /* BRONZE */
+  .card.bronze {
+    border-color: rgba(205,127,50,0.35);
+    background: linear-gradient(135deg, rgba(205,127,50,0.08) 0%, var(--surface) 70%);
+  }
+  .card.bronze .card-tag { background: rgba(205,127,50,0.18); color: var(--bronze); border: 1px solid rgba(205,127,50,0.3); }
+
+  /* SILVER */
+  .card.silver {
+    border-color: rgba(143,180,212,0.3);
+    background: linear-gradient(135deg, rgba(143,180,212,0.06) 0%, var(--surface) 70%);
+  }
+  .card.silver .card-tag { background: rgba(143,180,212,0.15); color: var(--silver); border: 1px solid rgba(143,180,212,0.25); }
+
+  /* GOLD */
+  .card.gold {
+    border-color: rgba(255,215,0,0.35);
+    background: linear-gradient(135deg, rgba(255,215,0,0.07) 0%, var(--surface) 70%);
+  }
+  .card.gold .card-tag { background: rgba(255,215,0,0.15); color: var(--gold); border: 1px solid rgba(255,215,0,0.3); }
+
+  /* ML CARD */
+  .card.ml {
+    border-color: rgba(168,85,247,0.3);
+    background: linear-gradient(135deg, rgba(168,85,247,0.07) 0%, var(--surface) 70%);
+  }
+  .card.ml .card-tag { background: rgba(168,85,247,0.15); color: var(--accent-purple); border: 1px solid rgba(168,85,247,0.25); }
+
+  /* UNIFIED — HERO */
+  .card.unified {
+    border: 2px solid rgba(0,229,160,0.45);
+    background: linear-gradient(135deg, rgba(0,229,160,0.08) 0%, rgba(0,212,255,0.04) 50%, var(--surface) 100%);
+    box-shadow: 0 0 40px rgba(0,229,160,0.1), 0 0 80px rgba(0,212,255,0.06);
+    padding: 22px 24px;
+  }
+
+  .card.unified .card-title { font-size: 17px; color: var(--accent-green); }
+  .card.unified .card-tag { background: rgba(0,229,160,0.15); color: var(--accent-green); border: 1px solid rgba(0,229,160,0.3); }
+
+  .unified-inner {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+    margin-top: 14px;
+  }
+
+  .unified-chip {
+    background: rgba(0,229,160,0.06);
+    border: 1px solid rgba(0,229,160,0.15);
+    border-radius: 8px;
+    padding: 8px 12px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px;
+    color: var(--text-secondary);
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  .unified-chip span { color: var(--accent-green); font-weight: 700; }
+
+  /* STORAGE */
+  .card.storage {
+    border-color: rgba(0,212,255,0.3);
+    background: linear-gradient(135deg, rgba(0,212,255,0.07) 0%, var(--surface) 70%);
+  }
+  .card.storage .card-tag { background: rgba(0,212,255,0.12); color: var(--accent-cyan); border: 1px solid rgba(0,212,255,0.25); }
+
+  /* ANALYTICS */
+  .card.analytics {
+    border-color: rgba(0,229,160,0.25);
+    background: linear-gradient(135deg, rgba(0,229,160,0.05) 0%, var(--surface) 70%);
+  }
+  .card.analytics .card-tag { background: rgba(0,229,160,0.1); color: var(--accent-green); border: 1px solid rgba(0,229,160,0.2); }
+
+  /* VIZ */
+  .card.viz {
+    border-color: rgba(245,166,35,0.3);
+    background: linear-gradient(135deg, rgba(245,166,35,0.07) 0%, var(--surface) 70%);
+  }
+  .card.viz .card-tag { background: rgba(245,166,35,0.15); color: var(--accent-gold); border: 1px solid rgba(245,166,35,0.25); }
+
+  .viz-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 6px;
+    margin-top: 10px;
+  }
+
+  .viz-chip {
+    background: rgba(245,166,35,0.06);
+    border: 1px solid rgba(245,166,35,0.15);
+    border-radius: 6px;
+    padding: 6px 10px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 9px;
+    color: var(--text-secondary);
+    display: flex;
+    align-items: center;
+    gap: 5px;
+  }
+
+  /* FULL WIDTH */
+  .full-width { grid-column: 1 / -1; }
+
+  /* MEDALLION ARROW ROW */
+  .medallion-arrows {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 10px;
+    padding: 4px 0;
+  }
+
+  .mini-arrow {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    gap: 3px;
+    font-size: 10px;
+    color: var(--text-dim);
+    font-family: 'JetBrains Mono', monospace;
+  }
+
+  /* ANIMATIONS */
+  @keyframes fadeDown {
+    from { opacity: 0; transform: translateY(-20px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+
+  @keyframes fadeUp {
+    from { opacity: 0; transform: translateY(14px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+
+  @keyframes pulse {
+    0%, 100% { opacity: 1; box-shadow: 0 0 8px var(--accent-cyan); }
+    50%       { opacity: 0.5; box-shadow: 0 0 4px var(--accent-cyan); }
+  }
+
+  /* FLOW LINE decoration */
+  .flow-connector {
+    display: flex;
+    justify-content: center;
+    margin: 6px 0;
+  }
+
+  .flow-connector svg {
+    opacity: 0.6;
+  }
+
+  /* FOOTER */
+  .footer {
+    margin-top: 40px;
+    text-align: center;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px;
+    color: var(--text-dim);
+    letter-spacing: 0.1em;
+    animation: fadeUp 0.5s ease 1s both;
+  }
+
+  /* LEGEND */
+  .legend {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 16px;
+    margin-top: 32px;
+    padding: 16px 20px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    animation: fadeUp 0.5s ease 1s both;
+  }
+
+  .legend-item {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px;
+    color: var(--text-secondary);
+  }
+
+  .legend-dot {
+    width: 10px; height: 10px;
+    border-radius: 3px;
+    flex-shrink: 0;
+  }
+</style>
+</head>
+<body>
+<div class="grid-bg"></div>
+<div class="wrapper">
+
+  <!-- HEADER -->
+  <div class="header">
+    <div class="header-badge">Real-Time System · Delta Lakehouse</div>
+    <h1>Real-Time Data Engineering<br>Lakehouse Architecture</h1>
+    <div class="header-sub">Medallion Architecture · Apache Kafka · Spark Streaming · Delta Lake · ML Pipeline</div>
+  </div>
+
+  <!-- 1. DATA SOURCES -->
+  <div class="layer">
+    <div class="layer-label">① Data Sources Layer</div>
+    <div class="card-row cols-4">
+      <div class="card source">
+        <span class="card-icon">🐙</span>
+        <div class="card-title">GitHub Logs</div>
+        <div class="card-desc">Push events, PRs,<br>commits, issues</div>
+        <div class="card-tag">⚡ Streaming</div>
+      </div>
+      <div class="card source">
+        <span class="card-icon">🛒</span>
+        <div class="card-title">Ecommerce Transactions</div>
+        <div class="card-desc">Orders, payments,<br>cart events</div>
+        <div class="card-tag">⚡ Streaming</div>
+      </div>
+      <div class="card source">
+        <span class="card-icon">🌤️</span>
+        <div class="card-title">Weather Data</div>
+        <div class="card-desc">Sensors, forecasts,<br>telemetry feeds</div>
+        <div class="card-tag">⚡ Streaming</div>
+      </div>
+      <div class="card source">
+        <span class="card-icon">𝕏</span>
+        <div class="card-title">Twitter Data</div>
+        <div class="card-desc">Tweets, mentions,<br>hashtags, trends</div>
+        <div class="card-tag">⚡ Streaming</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ARROW -->
+  <div class="arrow-row"><div class="arrow-col"><div class="arrow-line"></div></div></div>
+
+  <!-- 2. INGESTION -->
+  <div class="layer">
+    <div class="layer-label">② Ingestion Layer · Apache Kafka</div>
+    <div class="card-row cols-4">
+      <div class="card kafka">
+        <span class="card-icon">📨</span>
+        <div class="card-title">github-logs</div>
+        <div class="card-desc">Kafka Topic</div>
+        <div class="card-tag">🟠 Kafka</div>
+      </div>
+      <div class="card kafka">
+        <span class="card-icon">📨</span>
+        <div class="card-title">ecommerce-txn</div>
+        <div class="card-desc">Kafka Topic</div>
+        <div class="card-tag">🟠 Kafka</div>
+      </div>
+      <div class="card kafka">
+        <span class="card-icon">📨</span>
+        <div class="card-title">weather-data</div>
+        <div class="card-desc">Kafka Topic</div>
+        <div class="card-tag">🟠 Kafka</div>
+      </div>
+      <div class="card kafka">
+        <span class="card-icon">📨</span>
+        <div class="card-title">twitter-stream</div>
+        <div class="card-desc">Kafka Topic</div>
+        <div class="card-tag">🟠 Kafka</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ARROW -->
+  <div class="arrow-row"><div class="arrow-col"><div class="arrow-line"></div></div></div>
+
+  <!-- 3. PROCESSING -->
+  <div class="layer">
+    <div class="layer-label">③ Processing Layer</div>
+    <div class="card-row cols-1">
+      <div class="card spark">
+        <span class="card-icon">⚡</span>
+        <div class="card-title">Apache Spark Structured Streaming</div>
+        <div class="card-desc">Micro-batch stream processing · Parallel consumer across all Kafka topics · Schema-on-read with dynamic inference</div>
+        <div class="card-tag">🔥 Spark 3.x</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ARROW -->
+  <div class="arrow-row"><div class="arrow-col"><div class="arrow-line"></div></div></div>
+
+  <!-- 4. MEDALLION -->
+  <div class="layer">
+    <div class="layer-label">④ Storage & Processing · Medallion Architecture</div>
+    <div class="medallion-block">
+      <div class="medallion-label">🏅 Medallion Architecture — Delta Lake</div>
+
+      <!-- BRONZE -->
+      <div style="margin-bottom: 10px;">
+        <div class="card-row cols-4">
+          <div class="card bronze">
+            <span class="card-icon">🥉</span>
+            <div class="card-title">Bronze · GitHub</div>
+            <div class="card-desc">Raw JSON ingested<br>Delta table, append-only</div>
+            <div class="card-tag">▲ Bronze</div>
+          </div>
+          <div class="card bronze">
+            <span class="card-icon">🥉</span>
+            <div class="card-title">Bronze · Ecommerce</div>
+            <div class="card-desc">Raw JSON ingested<br>Delta table, append-only</div>
+            <div class="card-tag">▲ Bronze</div>
+          </div>
+          <div class="card bronze">
+            <span class="card-icon">🥉</span>
+            <div class="card-title">Bronze · Weather</div>
+            <div class="card-desc">Raw JSON ingested<br>Delta table, append-only</div>
+            <div class="card-tag">▲ Bronze</div>
+          </div>
+          <div class="card bronze">
+            <span class="card-icon">🥉</span>
+            <div class="card-title">Bronze · Twitter</div>
+            <div class="card-desc">Raw JSON ingested<br>Delta table, append-only</div>
+            <div class="card-tag">▲ Bronze</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- BRONZE→SILVER arrows -->
+      <div class="medallion-arrows" style="margin-bottom:8px;">
+        <div class="mini-arrow">↓ parse JSON</div>
+        <div class="mini-arrow" style="grid-column:2/4; text-align:center;">↓ select fields · clean nulls · cast types</div>
+        <div class="mini-arrow" style="grid-column:4/5;">↓ parse JSON</div>
+      </div>
+
+      <!-- SILVER -->
+      <div style="margin-bottom: 10px;">
+        <div class="card-row cols-4">
+          <div class="card silver">
+            <span class="card-icon">🥈</span>
+            <div class="card-title">Silver · GitHub</div>
+            <div class="card-desc">Parsed fields,<br>structured schema</div>
+            <div class="card-tag">▲ Silver</div>
+          </div>
+          <div class="card silver">
+            <span class="card-icon">🥈</span>
+            <div class="card-title">Silver · Ecommerce</div>
+            <div class="card-desc">Cleaned txns,<br>validated amounts</div>
+            <div class="card-tag">▲ Silver</div>
+          </div>
+          <div class="card silver">
+            <span class="card-icon">🥈</span>
+            <div class="card-title">Silver · Weather</div>
+            <div class="card-desc">Unit-normalized,<br>outliers removed</div>
+            <div class="card-tag">▲ Silver</div>
+          </div>
+          <div class="card silver">
+            <span class="card-icon">🥈</span>
+            <div class="card-title">Silver · Twitter</div>
+            <div class="card-desc">Tokenized text,<br>engagement metrics</div>
+            <div class="card-tag">▲ Silver</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- SILVER→GOLD arrows -->
+      <div class="medallion-arrows" style="margin-bottom:8px;">
+        <div class="mini-arrow">↓ feature eng.</div>
+        <div class="mini-arrow" style="grid-column:2/4; text-align:center;">↓ hour · day_of_week · rolling aggregates · lag features</div>
+        <div class="mini-arrow" style="grid-column:4/5;">↓ feature eng.</div>
+      </div>
+
+      <!-- GOLD -->
+      <div>
+        <div class="card-row cols-4">
+          <div class="card gold">
+            <span class="card-icon">🥇</span>
+            <div class="card-title">Gold · GitHub</div>
+            <div class="card-desc">hour, day_of_week,<br>commit_freq, pr_rate</div>
+            <div class="card-tag">★ Gold</div>
+          </div>
+          <div class="card gold">
+            <span class="card-icon">🥇</span>
+            <div class="card-title">Gold · Ecommerce</div>
+            <div class="card-desc">hour, day_of_week,<br>revenue_lag, basket_size</div>
+            <div class="card-tag">★ Gold</div>
+          </div>
+          <div class="card gold">
+            <span class="card-icon">🥇</span>
+            <div class="card-title">Gold · Weather</div>
+            <div class="card-desc">hour, day_of_week,<br>temp_rolling, humidity</div>
+            <div class="card-tag">★ Gold</div>
+          </div>
+          <div class="card gold">
+            <span class="card-icon">🥇</span>
+            <div class="card-title">Gold · Twitter</div>
+            <div class="card-desc">hour, day_of_week,<br>sentiment, virality</div>
+            <div class="card-tag">★ Gold</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ARROW -->
+  <div class="arrow-row"><div class="arrow-col"><div class="arrow-line"></div></div></div>
+
+  <!-- 5. ML -->
+  <div class="layer">
+    <div class="layer-label">⑤ Machine Learning Layer</div>
+    <div class="card-row cols-1">
+      <div class="card ml">
+        <span class="card-icon">🤖</span>
+        <div class="card-title">Classification Model · Inference Pipeline</div>
+        <div class="card-desc">Apply trained ML model across all domain Gold tables · Output column: <strong style="color:var(--accent-purple)">prediction</strong> · Batch inference via Spark MLlib or MLflow</div>
+        <div class="card-tag">🔮 ML Predictions</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ARROW -->
+  <div class="arrow-row"><div class="arrow-col"><div class="arrow-line"></div></div></div>
+
+  <!-- 6. UNIFIED LAKEHOUSE -->
+  <div class="layer">
+    <div class="layer-label">⑥ Unified Lakehouse · Central Hub</div>
+    <div class="card-row cols-1">
+      <div class="card unified">
+        <div style="display:flex; align-items:center; gap:12px; flex-wrap:wrap;">
+          <span style="font-size:32px;">🏔️</span>
+          <div>
+            <div class="card-title">Unified Lakehouse — Single Source of Truth</div>
+            <div class="card-desc" style="margin-top:4px;">All domain Gold tables merged via <strong style="color:#00e5a0;">unionByName()</strong> · Schema differences handled automatically · "domain" column identifies source origin</div>
+          </div>
+          <div class="card-tag" style="margin-left:auto; margin-top:0;">🌐 Delta Lake</div>
+        </div>
+        <div class="unified-inner">
+          <div class="unified-chip"><span>✓</span> ACID Transactions</div>
+          <div class="unified-chip"><span>✓</span> Schema Evolution</div>
+          <div class="unified-chip"><span>✓</span> Time Travel / Versioning</div>
+          <div class="unified-chip"><span>✓</span> domain column tagging</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ARROW -->
+  <div class="arrow-row"><div class="arrow-col"><div class="arrow-line"></div></div></div>
+
+  <!-- 7. ANALYTICS -->
+  <div class="layer">
+    <div class="layer-label">⑦ Analytics Layer</div>
+    <div class="card-row cols-2">
+      <div class="card analytics">
+        <span class="card-icon">🔍</span>
+        <div class="card-title">Spark SQL</div>
+        <div class="card-desc">In-cluster SQL queries · DataFrameAPI · Complex aggregations</div>
+        <div class="card-tag">⚡ Spark SQL</div>
+      </div>
+      <div class="card analytics">
+        <span class="card-icon">🔭</span>
+        <div class="card-title">Trino</div>
+        <div class="card-desc">Distributed query engine · Federated access · BI-ready endpoints</div>
+        <div class="card-tag">🔷 Trino</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ARROW -->
+  <div class="arrow-row"><div class="arrow-col"><div class="arrow-line"></div></div></div>
+
+  <!-- 8. VISUALIZATION -->
+  <div class="layer">
+    <div class="layer-label">⑧ Visualization Layer</div>
+    <div class="card-row cols-1">
+      <div class="card viz">
+        <div style="display:flex; align-items:center; gap:10px; margin-bottom: 4px;">
+          <span style="font-size:26px;">📊</span>
+          <div>
+            <div class="card-title">Power BI Dashboard</div>
+            <div class="card-desc">Cross-domain insights · Real-time refresh · Executive-ready reports</div>
+          </div>
+          <div class="card-tag" style="margin-left:auto;">📈 Power BI</div>
+        </div>
+        <div class="viz-grid">
+          <div class="viz-chip">📉 Event Distribution by Domain</div>
+          <div class="viz-chip">🔮 Prediction Results & Accuracy</div>
+          <div class="viz-chip">🕐 Time-Based Trends (hour/DoW)</div>
+          <div class="viz-chip">🔗 Cross-Domain Insights</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- LEGEND -->
+  <div class="legend">
+    <div class="legend-item"><div class="legend-dot" style="background:rgba(45,122,255,0.6);"></div>Data Sources</div>
+    <div class="legend-item"><div class="legend-dot" style="background:rgba(255,107,53,0.7);"></div>Apache Kafka</div>
+    <div class="legend-item"><div class="legend-dot" style="background:rgba(248,141,60,0.7);"></div>Apache Spark</div>
+    <div class="legend-item"><div class="legend-dot" style="background:rgba(205,127,50,0.8);"></div>Bronze Layer</div>
+    <div class="legend-item"><div class="legend-dot" style="background:rgba(143,180,212,0.8);"></div>Silver Layer</div>
+    <div class="legend-item"><div class="legend-dot" style="background:rgba(255,215,0,0.8);"></div>Gold Layer</div>
+    <div class="legend-item"><div class="legend-dot" style="background:rgba(168,85,247,0.7);"></div>ML Inference</div>
+    <div class="legend-item"><div class="legend-dot" style="background:rgba(0,229,160,0.7);"></div>Unified Lakehouse</div>
+    <div class="legend-item"><div class="legend-dot" style="background:rgba(0,212,255,0.6);"></div>Analytics / Query</div>
+    <div class="legend-item"><div class="legend-dot" style="background:rgba(245,166,35,0.7);"></div>Power BI</div>
+  </div>
+
+  <div class="footer">
+    Real-Time Lakehouse · Kafka → Spark Streaming → Delta Lake (Bronze/Silver/Gold) → ML → Unified → Analytics → Power BI
+  </div>
+
+</div>
+</body>
+</html>
